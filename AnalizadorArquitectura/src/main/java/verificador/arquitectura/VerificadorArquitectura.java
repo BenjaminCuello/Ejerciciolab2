@@ -5,12 +5,14 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.PackageDeclaration;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Scanner; // <--- IMPORTANTE: Añadir esta importacion
+import java.util.Scanner;
 
 public class VerificadorArquitectura {
 
@@ -19,7 +21,7 @@ public class VerificadorArquitectura {
 
         DefinicionArquitectura arquitecturaDefinida = new DefinicionArquitectura();
 
-        // --- Configuracion de Capas (sin cambios) ---
+        // --- Configuracion de Capas ---
         IdentificadorTipoCapa tipoPresentacion = new TipoCapaPresentacion();
         IdentificadorTipoCapa tipoServicio = new TipoCapaServicio();
         IdentificadorTipoCapa tipoPersistencia = new TipoCapaPersistencia();
@@ -58,17 +60,17 @@ public class VerificadorArquitectura {
                     ", Paquetes: " + cfgCapa.getPaquetesAsociados());
         }
 
-        // --- Definicion de Reglas de Dependencia Permitidas (sin cambios) ---
+        // --- Definicion de Reglas de Dependencia Permitidas ---
         System.out.println("\nDefiniendo Reglas de Dependencia Permitidas:");
         arquitecturaDefinida.permitirDependencia(tipoPresentacion, tipoServicio);
         arquitecturaDefinida.permitirDependencia(tipoServicio, tipoPersistencia);
 
         // --- OBTENER RUTA DEL PROYECTO DEL USUARIO ---
-        Scanner scanner = new Scanner(System.in); // Creamos un objeto Scanner para leer la entrada del usuario
+        Scanner scanner = new Scanner(System.in);
         System.out.println("\nPor favor, ingresa la ruta completa a la carpeta 'src/main/java' del proyecto a analizar:");
         System.out.print("Ruta: ");
-        String rutaAlCodigoFuente = scanner.nextLine(); // Leemos la linea que el usuario ingrese
-        scanner.close(); // Cerramos el scanner cuando ya no lo necesitamos
+        String rutaAlCodigoFuente = scanner.nextLine();
+        scanner.close();
 
         System.out.println("\nAnalizando el proyecto en: " + rutaAlCodigoFuente);
         File directorioFuente = new File(rutaAlCodigoFuente);
@@ -76,21 +78,19 @@ public class VerificadorArquitectura {
         if (!directorioFuente.exists() || !directorioFuente.isDirectory()) {
             System.err.println("Error: La ruta especificada no existe o no es un directorio valido.");
             System.err.println("Asegurate de que la ruta sea a la carpeta que contiene los paquetes (ej. 'src/main/java').");
-            return; // Salimos del programa si la ruta no es valida
+            return;
         }
 
         analizarProyecto(rutaAlCodigoFuente, arquitecturaDefinida);
 
-    } // Fin del metodo main
+    } // Fin main
 
-    // El metodo analizarProyecto y listarArchivosJava se quedan como estaban
     public static void analizarProyecto(String rutaBaseCodigo, DefinicionArquitectura arquitectura) {
-        // ... (sin cambios aqui)
         File directorioBase = new File(rutaBaseCodigo);
         List<File> archivosJava = listarArchivosJava(directorioBase);
 
         System.out.println("Archivos Java encontrados: " + archivosJava.size());
-        int numeroViolaciones = 0;
+        AtomicInteger numeroViolaciones = new AtomicInteger(0);
 
         for (File archivoJava : archivosJava) {
             System.out.println("\n  Parseando archivo: " + archivoJava.getAbsolutePath());
@@ -113,6 +113,7 @@ public class VerificadorArquitectura {
 
                 System.out.println("    Paquete: " + paqueteClaseActual + " (Capa: " + capaClaseActual.getNombreDelTipoDeCapa() + ")");
 
+                // Analizar imports
                 for (ImportDeclaration importDeclaracion : cu.getImports()) {
                     String nombreClaseOModuloImportado = importDeclaracion.getNameAsString();
 
@@ -137,31 +138,99 @@ public class VerificadorArquitectura {
                                 capaClaseActual.getNombreDelTipoDeCapa() + " (" + paqueteClaseActual + ") -> " +
                                 capaClaseImportada.getNombreDelTipoDeCapa() + " (" + paqueteImportado + ")");
 
-                        if (!arquitectura.esDependenciaPermitida(capaClaseActual, capaClaseImportada)) {
-                            numeroViolaciones++;
+                        boolean mismaCapa = capaClaseActual.getNombreDelTipoDeCapa().equals(capaClaseImportada.getNombreDelTipoDeCapa());
+                        boolean paquetesDistintos = !paqueteClaseActual.equals(paqueteImportado);
+
+                        if (mismaCapa && paquetesDistintos) {
+                            numeroViolaciones.incrementAndGet();
                             System.err.println("      ---------------------------------------------------------");
                             System.err.println("      VIOLACION ARQUITECTONICA DETECTADA:");
-
-                            // Determinar el tipo de error especifico
-                            String tipoError;
-                            if (capaClaseActual.getIdentificadorTipo().getNombreTipo().equals(capaClaseImportada.getIdentificadorTipo().getNombreTipo())) {
-                                tipoError = "Dependencia intra-capa no permitida en la capa '" + capaClaseActual.getNombreDelTipoDeCapa() + "'.";
-                            } else {
-                                tipoError = "Dependencia de la capa '" + capaClaseActual.getNombreDelTipoDeCapa() +
-                                        "' hacia la capa '" + capaClaseImportada.getNombreDelTipoDeCapa() + "' no esta permitida.";
-                            }
+                            System.err.println("      TIPO DE ERROR: Dependencia cruzada dentro de la misma capa '" + capaClaseActual.getNombreDelTipoDeCapa() + "'.");
+                            System.err.println("      DETALLES:");
+                            System.err.println("        - Clase Origen: " + archivoJava.getName());
+                            System.err.println("        - Paquete Origen: " + paqueteClaseActual);
+                            System.err.println("        - Paquete Destino: " + paqueteImportado);
+                            importDeclaracion.getRange().ifPresent(r ->
+                                    System.err.println("        - En Línea (aproximada del import): " + r.begin.line)
+                            );
+                            System.err.println("      ---------------------------------------------------------");
+                        } else if (!mismaCapa && !arquitectura.esDependenciaPermitida(capaClaseActual, capaClaseImportada)) {
+                            numeroViolaciones.incrementAndGet();
+                            System.err.println("      ---------------------------------------------------------");
+                            System.err.println("      VIOLACION ARQUITECTONICA DETECTADA:");
+                            String tipoError = "Dependencia de la capa '" + capaClaseActual.getNombreDelTipoDeCapa() +
+                                    "' hacia la capa '" + capaClaseImportada.getNombreDelTipoDeCapa() + "' no está permitida.";
                             System.err.println("      TIPO DE ERROR: " + tipoError);
                             System.err.println("      DETALLES:");
                             System.err.println("        - Archivo Origen: " + archivoJava.getName());
-                            System.err.println("        - Paquete Origen: " + paqueteClaseActual + " (Capa: " + capaClaseActual.getNombreDelTipoDeCapa() + ")");
-                            System.err.println("        - Dependencia Hacia Paquete: " + paqueteImportado + " (Capa: " + capaClaseImportada.getNombreDelTipoDeCapa() + ")");
+                            System.err.println("        - Paquete Origen: " + paqueteClaseActual);
+                            System.err.println("        - Dependencia Hacia Paquete: " + paqueteImportado);
                             importDeclaracion.getRange().ifPresent(r ->
-                                    System.err.println("        - En Linea (aproximada del import): " + r.begin.line)
+                                    System.err.println("        - En Línea (aproximada del import): " + r.begin.line)
                             );
                             System.err.println("      ---------------------------------------------------------");
                         }
                     }
                 }
+
+                // Analizar instanciaciones (new Clase())
+                cu.findAll(com.github.javaparser.ast.expr.ObjectCreationExpr.class).forEach(expr -> {
+                    String nombreClaseInstanciada = expr.getType().asString();
+                    String paqueteImportado = null;
+
+                    // Buscar en imports con nombre exacto
+                    for (ImportDeclaration importDecl : cu.getImports()) {
+                        String importStr = importDecl.getNameAsString();
+                        if (importStr.endsWith("." + nombreClaseInstanciada)) {
+                            paqueteImportado = importStr.substring(0, importStr.lastIndexOf('.'));
+                            break;
+                        }
+                    }
+
+                    // Si no está en imports, asumir paquete actual
+                    if (paqueteImportado == null) {
+                        Optional<PackageDeclaration> pkg = cu.getPackageDeclaration();
+                        if (pkg.isPresent()) {
+                            paqueteImportado = pkg.get().getNameAsString();
+                        }
+                    }
+
+                    // Ignorar clases estándar Java
+                    if (paqueteImportado == null || paqueteImportado.startsWith("java.") || paqueteImportado.startsWith("javax.")) {
+                        return;
+                    }
+
+                    ConfiguracionCapa capaImportada = arquitectura.getCapaPorNombrePaquete(paqueteImportado);
+
+                    if (capaImportada != null) {
+                        boolean mismaCapa = capaClaseActual.getNombreDelTipoDeCapa().equals(capaImportada.getNombreDelTipoDeCapa());
+                        boolean paquetesDistintos = !paqueteClaseActual.equals(paqueteImportado);
+
+                        if (mismaCapa && paquetesDistintos) {
+                            numeroViolaciones.incrementAndGet();
+                            System.err.println("      ---------------------------------------------------------");
+                            System.err.println("      VIOLACION ARQUITECTONICA DETECTADA:");
+                            System.err.println("      TIPO DE ERROR: Dependencia cruzada dentro de la misma capa '" + capaClaseActual.getNombreDelTipoDeCapa() + "'.");
+                            System.err.println("      DETALLES:");
+                            System.err.println("        - Clase Origen: " + archivoJava.getName());
+                            System.err.println("        - Paquete Origen: " + paqueteClaseActual);
+                            System.err.println("        - Se instancia clase de paquete: " + paqueteImportado);
+                            expr.getRange().ifPresent(r -> System.err.println("        - En Línea (aproximada): " + r.begin.line));
+                            System.err.println("      ---------------------------------------------------------");
+                        } else if (!mismaCapa && !arquitectura.esDependenciaPermitida(capaClaseActual, capaImportada)) {
+                            numeroViolaciones.incrementAndGet();
+                            System.err.println("      ---------------------------------------------------------");
+                            System.err.println("      VIOLACION ARQUITECTONICA DETECTADA:");
+                            System.err.println("      TIPO DE ERROR: Instanciación de clase no permitida entre capas.");
+                            System.err.println("      DETALLES:");
+                            System.err.println("        - Clase Origen: " + archivoJava.getName());
+                            System.err.println("        - Capa Origen: " + capaClaseActual.getNombreDelTipoDeCapa());
+                            System.err.println("        - Capa Destino: " + capaImportada.getNombreDelTipoDeCapa());
+                            expr.getRange().ifPresent(r -> System.err.println("        - En Línea (aproximada): " + r.begin.line));
+                            System.err.println("      ---------------------------------------------------------");
+                        }
+                    }
+                });
 
             } catch (FileNotFoundException e) {
                 System.err.println("Error: Archivo no encontrado al parsear - " + archivoJava.getAbsolutePath());
@@ -170,12 +239,13 @@ public class VerificadorArquitectura {
             }
         }
 
-        if (numeroViolaciones > 0) {
+        if (numeroViolaciones.get() > 0) {
             System.out.println("\n--- Resumen: Se encontraron " + numeroViolaciones + " violaciones arquitectonicas. ---");
         } else {
             System.out.println("\n--- Resumen: ¡No se encontraron violaciones arquitectonicas! ---");
         }
     }
+
     public static List<File> listarArchivosJava(File directorio) {
         List<File> listaArchivos = new ArrayList<>();
         File[] archivos = directorio.listFiles();
@@ -192,5 +262,4 @@ public class VerificadorArquitectura {
         return listaArchivos;
     }
 
-
-} // Fin de la clase VerificadorArquitectura
+} // Fin clase VerificadorArquitectura

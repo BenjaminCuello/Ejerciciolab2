@@ -43,6 +43,6 @@ public class ConfiguracionCapa {
     // Por ejemplo, si la capa de presentacion tiene el paquete "ui",
     // y le preguntamos estaCapa.contienePaquete("ui"), deberia devolver true.
     public boolean contienePaquete(String nombrePaquete) {
-        return paquetesAsociados.contains(nombrePaquete);
+        return paquetesAsociados.stream().anyMatch(nombrePaquete::startsWith);
     }
 }
