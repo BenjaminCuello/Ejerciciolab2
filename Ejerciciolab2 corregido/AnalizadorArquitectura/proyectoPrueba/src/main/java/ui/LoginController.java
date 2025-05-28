@@ -1,5 +1,11 @@
 package ui;
 
+import service.AuthService;
+
 public class LoginController {
-    private LoginController loginController;
+    private final AuthService authService = new AuthService();
+
+    public boolean login(String username, String password) {
+        return authService.authenticate(username, password);
+    }
 }

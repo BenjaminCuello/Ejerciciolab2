@@ -1,12 +1,12 @@
-package ui.menu;
-// ❌
-import ui.LoginController;  // violacion cruzada en misma capa (Presentación)
+package ui;
+
+import service.UserService;
+import ui.LoginController; // violacion de dependencias cruzadas (misma capa)
 
 public class MainController {
-    private LoginController loginController;
+    private final UserService userService = new UserService();
 
-    public void iniciar() {
-        loginController = new LoginController();
-        loginController.iniciarSesion();
+    public void run() {
+        userService.registerUser("Alice");
     }
 }

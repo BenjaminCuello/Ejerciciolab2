@@ -1,16 +1,11 @@
 package service;
 
-import dao.UserRepository; // ✅ Permitido: Service puede acceder a DAO
-import ui.UserView;  // ❌ Service no debe depender de UI
+import dao.UserRepository;
 
 public class AuthService {
-    private UserRepository userRepository;
+    private final UserRepository repository = new UserRepository();
 
-    public AuthService() {
-        this.userRepository = new UserRepository();
-    }
-
-    public boolean autenticar(String usuario, String contraseña) {
-        return userRepository.validarCredenciales(usuario, contraseña);
+    public boolean authenticate(String user, String password) {
+        return repository.find(user).equals(password);
     }
 }
