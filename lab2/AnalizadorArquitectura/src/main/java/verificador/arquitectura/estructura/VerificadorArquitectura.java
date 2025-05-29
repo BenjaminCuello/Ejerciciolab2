@@ -164,7 +164,7 @@ public class VerificadorArquitectura {
                         boolean mismaCapa = capaClaseActual.getNombreDelTipoDeCapa().equals(capaClaseImportada.getNombreDelTipoDeCapa());
                         boolean paquetesDistintos = !paqueteClaseActual.equals(paqueteImportado);
 
-                        if (mismaCapa && paquetesDistintos) {
+                        if (mismaCapa) {
                             numeroViolaciones.incrementAndGet();
                             System.err.println("      ---------------------------------------------------------");
                             System.err.println("      VIOLACION ARQUITECTONICA DETECTADA:");
